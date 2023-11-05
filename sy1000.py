@@ -6,8 +6,9 @@ import time
 
 print(mido.get_input_names())
 
-input_port_name = "SY-1000 DAW CTRL"  # Replace with your MIDI input port name
-# input_port_name = "SY-1000"  # Replace with your MIDI input port name
+input_port_name = "SY-1000"  # Replace with your MIDI input port name
+input_port_name2 = "SY-1000 DAW CTRL"  # Replace with your MIDI input port name
+input_port_name3 = "IAC Driver Automation"
 output_port_name = "IAC Driver Bus 1"  # Replace with your MIDI output port name
 
 output = mido.open_output(output_port_name)
@@ -42,9 +43,29 @@ def main():
 
     # Define a function to handle MIDI messages
     def handle_midi_message(msg):
+        if not msg:
+            return
+        if msg.type != 'clock':
+            print(msg)
         global program_number
         if msg.type == 'control_change':
             cc_number = msg.control
+            if cc_number == 40:
+                print(f"40: {msg.value}")
+                if msg.value == 0:
+                    output2.send(mido.Message('sysex', data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x10, 0x00, 0x03, 0x0C, 0x00, 0x61]))
+                elif msg.value == 63: # red
+                    output2.send(mido.Message('sysex', data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x10, 0x00, 0x03, 0x0C, 0x01, 0x60]))
+                elif msg.value == 127: # green
+                    output2.send(mido.Message('sysex', data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x10, 0x00, 0x03, 0x0C, 0x04, 0x5D]))
+            if cc_number == 41:
+                print(f"41: {msg.value}")
+                if msg.value == 0:
+                    output2.send(mido.Message('sysex', data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x10, 0x00, 0x03, 0x0E, 0x00, 0x5F]))
+                elif msg.value == 63:
+                    output2.send(mido.Message('sysex', data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x10, 0x00, 0x03, 0x0E, 0x01, 0x5E]))
+                elif msg.value == 127:
+                    output2.send(mido.Message('sysex', data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x10, 0x00, 0x03, 0x0E, 0x04, 0x5B]))
             if cc_number == 10 and msg.value == 0 and cc_history[cc_number] is not None and time.time() - cc_history[cc_number] > 2 * DOUBLE_TAP_THRESHOLD:
                 output.send(mido.Message('control_change', control=1, value = 127))
                 output.send(mido.Message('control_change', control=1, value = 0))
@@ -134,14 +155,28 @@ def main():
     # Create a dictionary to store the last timestamp for each CC number
     cc_history = defaultdict(lambda: None)
 
-    # Open a MIDI input port (change 'Your MIDI Input Port' to your actual port name)
-    with mido.open_input(input_port_name) as inport:
-        print(f"Listening for MIDI messages... on {input_port_name}")
-        try:
-            for msg in inport:
-                handle_midi_message(msg)
-        except KeyboardInterrupt:
-            pass
+    if False:
+        # async
+        # Open a MIDI input port (change 'Your MIDI Input Port' to your actual port name)
+        mido.open_input(name=input_port_name, callback=handle_midi_message)
+        mido.open_input(name=input_port_name2, callback=handle_midi_message)
+        mido.open_input(name=input_port_name3, callback=handle_midi_message)
+    else:
+        # polling
+        open_ports = []
+        open_ports.append(mido.open_input(name=input_port_name))
+        open_ports.append(mido.open_input(name=input_port_name2))
+        open_ports.append(mido.open_input(name=input_port_name3))
+        while True:
+            for port in open_ports:
+                handle_midi_message(port.poll())
+
+    # Keep the program running until the user presses CTRL+C
+    try:
+        while True:
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("Exiting program...")
 
 if __name__ == "__main__":
     main()
