@@ -3,6 +3,8 @@ import mido
 import sys
 from collections import defaultdict
 import time
+import threading
+import time
 
 print(mido.get_input_names())
 
@@ -19,6 +21,21 @@ output2 = mido.open_output(input_port_name)
 def calculate_checksum(data):
     checksum = 128 - (sum(data) % 128)
     return checksum
+
+def make_color_sysex(button, color):
+    data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12]
+    data2=[0x10, 0x00, 0x03, button, color]
+    sysex = data+data2+[calculate_checksum(data2)]
+    return sysex
+
+def send_messages_after_delay(port, messages, delay):
+    for msg in messages:
+        print(f"Waiting for {delay} seconds before sending the SysEx message...")
+        port.send(msg)  # Send the SysEx message
+        time.sleep(delay)  # Delay before sending the message
+        port.send(msg)  # Send the SysEx message
+        print("SysEx message sent.")
+
 
 def program_change(number):
     print("program change: {}".format(number))
@@ -50,22 +67,17 @@ def main():
         global program_number
         if msg.type == 'control_change':
             cc_number = msg.control
-            if cc_number == 40:
+            if cc_number == 40 and msg.value < 8:
                 print(f"40: {msg.value}")
-                if msg.value == 0:
-                    output2.send(mido.Message('sysex', data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x10, 0x00, 0x03, 0x0C, 0x00, 0x61]))
-                elif msg.value == 63: # red
-                    output2.send(mido.Message('sysex', data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x10, 0x00, 0x03, 0x0C, 0x01, 0x60]))
-                elif msg.value == 127: # green
-                    output2.send(mido.Message('sysex', data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x10, 0x00, 0x03, 0x0C, 0x04, 0x5D]))
-            if cc_number == 41:
+                # output2.send(mido.Message('sysex', data=make_color_sysex(0x0C, msg.value)))
+                # output2.send(mido.Message('sysex', data=make_color_sysex(0x0D, msg.value)))
+                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex(0x0F, msg.value))], 0.3)).start()
+            if cc_number == 41 and msg.value < 8:
                 print(f"41: {msg.value}")
-                if msg.value == 0:
-                    output2.send(mido.Message('sysex', data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x10, 0x00, 0x03, 0x0E, 0x00, 0x5F]))
-                elif msg.value == 63:
-                    output2.send(mido.Message('sysex', data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x10, 0x00, 0x03, 0x0E, 0x01, 0x5E]))
-                elif msg.value == 127:
-                    output2.send(mido.Message('sysex', data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x10, 0x00, 0x03, 0x0E, 0x04, 0x5B]))
+                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex(0x0E, msg.value))], 0.3)).start()
+            if cc_number == 42 and msg.value < 8:
+                print(f"42: {msg.value}")
+                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex(0x0C, msg.value)), mido.Message('sysex', data=make_color_sysex(0x0D, msg.value))], 0.3)).start()
             if cc_number == 10 and msg.value == 0 and cc_history[cc_number] is not None and time.time() - cc_history[cc_number] > 2 * DOUBLE_TAP_THRESHOLD:
                 output.send(mido.Message('control_change', control=1, value = 127))
                 output.send(mido.Message('control_change', control=1, value = 0))
