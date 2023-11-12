@@ -17,14 +17,39 @@ output = mido.open_output(output_port_name)
 output2 = mido.open_output(input_port_name)
 
 
+def make_title_sysex(input_name):
+    input_data = input_name.ljust(16)
+    # Convert input characters to a list of ASCII values
+    ascii_values = [ord(char) for char in input_data]
+
+    # Additional data
+    manufacturer_id = 0x41
+    additional_data_1 = [0x10, 0x00, 0x00, 0x00, 0x69, 0x12]
+    additional_data_2 = [0x10, 0x00, 0x00, 0x00]
+
+    # Create the SysEx message
+    sysex_message = [manufacturer_id]
+    sysex_message.extend(additional_data_1)
+    sysex_message.extend(additional_data_2)
+    sysex_message.extend(ascii_values)
+    checksum = calculate_checksum(ascii_values + additional_data_2)
+    sysex_message.append(checksum)
+    print(f"sending message {input_data}")
+    return sysex_message
 
 def calculate_checksum(data):
     checksum = 128 - (sum(data) % 128)
     return checksum
 
-def make_color_sysex(button, color):
+def make_color_sysex_patch(button, color):
     data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12]
     data2=[0x10, 0x00, 0x03, button, color]
+    sysex = data+data2+[calculate_checksum(data2)]
+    return sysex
+
+def make_color_sysex_system(button, color):
+    data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12]
+    data2=[0x00, 0x01, 0x20, button, color]
     sysex = data+data2+[calculate_checksum(data2)]
     return sysex
 
@@ -37,7 +62,14 @@ def send_messages_after_delay(port, messages, delay):
         print("SysEx message sent.")
 
 
+def bank_change(number):
+    global bank_number
+    bank_number = number
+    threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_title_sysex("bank "+str(number)))], 0.75)).start()
+
 def program_change(number):
+    global program_number
+    program_number = number
     print("program change: {}".format(number))
     button = (number - 1) % 4 + 1
     print("button: {}, program change: {}".format(button, number))
@@ -48,14 +80,16 @@ def program_change(number):
     output.send(mido.Message('program_change', program=number-1))
 
 def main():
-    global program_number
     global last_double
     global was
+    global bank_number
     program_number = 1
+    bank_number = 1
     last_double = None
     was = 10
 
-    program_change(program_number)
+    program_change(1)
+    # what is this?
     output2.send(mido.Message('sysex', data=[ 0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x7F, 0x00, 0x00, 0x01, 0x01, 0x7F]))
 
     # Define a function to handle MIDI messages
@@ -67,22 +101,22 @@ def main():
         global program_number
         if msg.type == 'control_change':
             cc_number = msg.control
-            if cc_number == 40 and msg.value < 8:
-                print(f"40: {msg.value}")
-                # output2.send(mido.Message('sysex', data=make_color_sysex(0x0C, msg.value)))
-                # output2.send(mido.Message('sysex', data=make_color_sysex(0x0D, msg.value)))
-                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex(0x0F, msg.value))], 0.3)).start()
             if cc_number == 41 and msg.value < 8:
                 print(f"41: {msg.value}")
-                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex(0x0E, msg.value))], 0.3)).start()
+                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex_patch(0x08, msg.value)), mido.Message('sysex', data=make_color_sysex_patch(0x09, msg.value))], 0.3)).start()
             if cc_number == 42 and msg.value < 8:
                 print(f"42: {msg.value}")
-                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex(0x0C, msg.value)), mido.Message('sysex', data=make_color_sysex(0x0D, msg.value))], 0.3)).start()
+                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex_patch(0x0A, msg.value)), mido.Message('sysex', data=make_color_sysex_patch(0x0B, msg.value))], 0.3)).start()
+            if cc_number == 43 and msg.value < 8:
+                print(f"43: {msg.value}")
+                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex_patch(0x0C, msg.value)), mido.Message('sysex', data=make_color_sysex_patch(0x0D, msg.value))], 0.3)).start()
+            if cc_number == 44 and msg.value < 8:
+                print(f"44: {msg.value}")
+                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex_patch(0x0E, msg.value)), mido.Message('sysex', data=make_color_sysex_patch(0x0F, msg.value))], 0.3)).start()
             if cc_number == 10 and msg.value == 0 and cc_history[cc_number] is not None and time.time() - cc_history[cc_number] > 2 * DOUBLE_TAP_THRESHOLD:
                 output.send(mido.Message('control_change', control=1, value = 127))
                 output.send(mido.Message('control_change', control=1, value = 0))
-                program_number = program_number//5*4 + 1 if (program_number%5==4) else 4
-                program_change(program_number)
+                program_change(program_number//5*4 + 1 if (program_number%5==4) else 4)
             if msg.value == 127:
                 timestamp = time.time()
                 if cc_callback[cc_number] is not None:
@@ -109,45 +143,41 @@ def main():
         global last_double
         global program_number
         global was
+        global bank_number
         match cc_number:
             case 10:
                 if last_double is not None and time.time() - last_double < 2*DOUBLE_TAP_THRESHOLD:
                     print("triple")
-                    program_number = program_number//5*4 + 1 if (was%5==3) else 3
-                    program_change(program_number)
+                    program_change(program_number//5*4 + 1 if (was%5==3) else 3)
                 else:
                     print("double")
                     last_double = time.time()
                     was = program_number
                     # output.send(mido.Message('control_change', control=1, value = 127))
                     # output.send(mido.Message('control_change', control=1, value = 0))
-                    program_number = program_number//5*4 + 1 if (program_number%5==2) else 2
-                    program_change(program_number)
+                    program_change(program_number//5*4 + 1 if (program_number%5==2) else 2)
             case 3:
                 print('bank up')
-                program_number += 4
-                program_change(program_number)
+                program_change(program_number + 4)
+                bank_change(bank_number + 1)
             case 4:
                 print('bank down')
+                if bank_number > 1:
+                    bank_change(bank_number - 1)
                 if program_number > 4:
-                    program_number -= 4
-                    program_change(program_number)
+                    program_change(program_number - 4)
             case 71:
                 print('1')
-                program_number = program_number//5*4 + 1
-                program_change(program_number)
+                program_change(program_number//5*4 + 1)
             case 72:
                 print('2')
-                program_number = program_number//5*4 + 2
-                program_change(program_number)
+                program_change(program_number//5*4 + 2)
             case 73:
                 print('3')
-                program_number = program_number//5*4 + 3
-                program_change(program_number)
+                program_change(program_number//5*4 + 3)
             case 74:
                 print('4')
-                program_number = program_number//5*4 + 4
-                program_change(program_number)
+                program_change(program_number//5*4 + 4)
 
     # Constants
     DOUBLE_TAP_THRESHOLD = 0.5  # Adjust this threshold as needed (in seconds)
