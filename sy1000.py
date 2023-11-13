@@ -96,54 +96,50 @@ def main():
     def handle_midi_message(msg):
         if not msg:
             return
-        if msg.type != 'clock':
-            print(msg)
         global program_number
         if msg.type == 'control_change':
             cc_number = msg.control
-            if cc_number == 41 and msg.value < 8:
-                print(f"41: {msg.value}")
-                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex_patch(0x08, msg.value)), mido.Message('sysex', data=make_color_sysex_patch(0x09, msg.value))], 0.3)).start()
-            if cc_number == 42 and msg.value < 8:
-                print(f"42: {msg.value}")
-                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex_patch(0x0A, msg.value)), mido.Message('sysex', data=make_color_sysex_patch(0x0B, msg.value))], 0.3)).start()
-            if cc_number == 43 and msg.value < 8:
-                print(f"43: {msg.value}")
-                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex_patch(0x0C, msg.value)), mido.Message('sysex', data=make_color_sysex_patch(0x0D, msg.value))], 0.3)).start()
-            if cc_number == 44 and msg.value < 8:
-                print(f"44: {msg.value}")
-                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex_patch(0x0E, msg.value)), mido.Message('sysex', data=make_color_sysex_patch(0x0F, msg.value))], 0.3)).start()
             if cc_number == 10 and msg.value == 0 and cc_history[cc_number] is not None and time.time() - cc_history[cc_number] > 2 * DOUBLE_TAP_THRESHOLD:
                 output.send(mido.Message('control_change', control=1, value = 127))
                 output.send(mido.Message('control_change', control=1, value = 0))
                 program_change(program_number//5*4 + 1 if (program_number%5==4) else 4)
+            if cc_callback[cc_number] is not None:
+                cc_callback[cc_number](cc_number, msg.value)
             if msg.value == 127:
                 timestamp = time.time()
-                if cc_callback[cc_number] is not None:
-                    cc_callback[cc_number](cc_number)
                 # Check for double tap on the same CC number
                 if cc_history[cc_number] is None:
                     cc_history[cc_number] = timestamp
                 elif timestamp - cc_history[cc_number] < DOUBLE_TAP_THRESHOLD:
                     if cc_double_callback[cc_number] is not None:
-                        cc_double_callback[cc_number](cc_number)
+                        cc_double_callback[cc_number](cc_number, msg.value)
                     # cc_history[cc_number] = None
                 else:
                     cc_history[cc_number] = timestamp
+            print(msg)
 
-    def my_callback2(cc_number):
+    def my_callback2(cc_number, value):
+        if value == 0: return
         print("cc is {}".format(cc_number))
         match cc_number:
             case 10:
                 output.send(mido.Message('control_change', control=1, value = 127))
                 output.send(mido.Message('control_change', control=1, value = 0))
 
+    def my_callback3(cc_number, value):
+            button_hex = 0x08 + 2 * (cc_number - 41)
+            if value < 8:
+                print(f"color {cc_number}: {value}")
+                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex_patch(button_hex, value)), mido.Message('sysex', data=make_color_sysex_patch(button_hex+1, value))], 0.0)).start()
+                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex_patch(button_hex, value)), mido.Message('sysex', data=make_color_sysex_patch(button_hex+1, value))], 0.3)).start()
+
     # Define a callback function for a specific CC number
-    def my_callback(cc_number):
+    def my_callback(cc_number, value):
         global last_double
         global program_number
         global was
         global bank_number
+        if value == 0: return
         match cc_number:
             case 10:
                 if last_double is not None and time.time() - last_double < 2*DOUBLE_TAP_THRESHOLD:
@@ -189,6 +185,10 @@ def main():
     cc_double_callback[3] = my_callback
     cc_double_callback[4] = my_callback
     cc_callback[10] = my_callback2
+    cc_callback[41] = my_callback3
+    cc_callback[42] = my_callback3
+    cc_callback[43] = my_callback3
+    cc_callback[44] = my_callback3
     cc_callback[71] = my_callback
     cc_callback[72] = my_callback
     cc_callback[73] = my_callback
