@@ -55,17 +55,25 @@ def make_color_sysex_system(button, color):
 
 def send_messages_after_delay(port, messages, delay):
     for msg in messages:
-        print(f"Waiting for {delay} seconds before sending the SysEx message...")
+        # print(f"Waiting for {delay} seconds before sending the SysEx message...")
         port.send(msg)  # Send the SysEx message
         time.sleep(delay)  # Delay before sending the message
         port.send(msg)  # Send the SysEx message
-        print("SysEx message sent.")
+        # print("SysEx message sent.")
 
+def get_char_for_number(number):
+    # ASCII value of 'A' is 65, subtract the number from 65 to get the desired ASCII value
+    ascii_value = 65 - number
+    # Convert the ASCII value back to a character
+    return chr(ascii_value)
 
 def bank_change(number):
     global bank_number
     bank_number = number
-    threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_title_sysex("bank "+str(number)))], 0.75)).start()
+    if (number > 0):
+        output2.send(mido.Message('sysex', data=make_title_sysex("bank "+str(number))))
+    else:
+        output2.send(mido.Message('sysex', data=make_title_sysex("bank "+get_char_for_number(number))))
 
 def program_change(number):
     global program_number
@@ -154,26 +162,23 @@ def main():
                     program_change(program_number//5*4 + 1 if (program_number%5==2) else 2)
             case 3:
                 print('bank up')
-                program_change(program_number + 4)
                 bank_change(bank_number + 1)
             case 4:
                 print('bank down')
                 if bank_number > 1:
                     bank_change(bank_number - 1)
-                if program_number > 4:
-                    program_change(program_number - 4)
             case 71:
                 print('1')
-                program_change(program_number//5*4 + 1)
+                program_change((bank_number-1)*4 + 1)
             case 72:
                 print('2')
-                program_change(program_number//5*4 + 2)
+                program_change((bank_number-1)*4 + 2)
             case 73:
                 print('3')
-                program_change(program_number//5*4 + 3)
+                program_change((bank_number-1)*4 + 3)
             case 74:
                 print('4')
-                program_change(program_number//5*4 + 4)
+                program_change((bank_number-1)*4 + 4)
 
     # Constants
     DOUBLE_TAP_THRESHOLD = 0.5  # Adjust this threshold as needed (in seconds)

@@ -44,11 +44,11 @@ def main():
     track.append(mido.Message('sysex', time=delay_time, data=sysex_message))
 
     # Add a delay of 1.5 seconds
-    delay_time = 1500000
-    track.append(mido.Message('sysex', time=delay_time, data=sysex_message))
+    # delay_time = 1500000
+    # track.append(mido.Message('sysex', time=delay_time, data=sysex_message))
 
     # Add the SysEx message
-    track.append(mido.Message('sysex', time=delay_time, data=sysex_message))
+    # track.append(mido.Message('sysex', time=delay_time, data=sysex_message))
 
     # Save the MIDI file
     mid.save(input_name+'.mid')
