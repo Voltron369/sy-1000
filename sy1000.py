@@ -5,6 +5,7 @@ from collections import defaultdict
 import time
 import threading
 import time
+import json
 
 print(mido.get_input_names())
 
@@ -16,6 +17,37 @@ output_port_name = "IAC Driver Bus 1"  # Replace with your MIDI output port name
 output = mido.open_output(output_port_name)
 output2 = mido.open_output(input_port_name)
 
+
+def load_state_from_json(filename):
+    try:
+        with open(filename, 'r') as file:
+            data = json.load(file)
+            return data['array1'], data['array2'], data['array3'], data['array4']
+    except FileNotFoundError:
+        # Return default arrays if file not found
+        return [1], [2], [3], [4]
+
+def save_state_to_json(filename, array1, array2, array3, array4):
+    data = {'array1': array1, 'array2': array2, 'array3': array3, 'array4': array4}
+    with open(filename, 'w') as file:
+        json.dump(data, file)
+
+def update_array(arrays, array_index, element_index, new_value):
+    # Ensure the array is large enough
+    while len(arrays[array_index]) <= element_index:
+        arrays[array_index].append(array_index)  # Append None or a default value
+    # Update the element
+    arrays[array_index][element_index] = new_value
+    # Save the updated state
+    save_state_to_json('arrays.json', *arrays)
+
+
+# Load the arrays
+array1, array2, array3, array4 = load_state_from_json('arrays.json')
+arrays = [array1, array2, array3, array4]
+
+# Example of updating an element (array index, element index, new value)
+update_array(arrays, 0, 2, 100)  # Update 3rd element of the 1st array
 
 def make_title_sysex(input_name):
     input_data = input_name.ljust(16)
@@ -107,10 +139,6 @@ def main():
         global program_number
         if msg.type == 'control_change':
             cc_number = msg.control
-            if cc_number == 10 and msg.value == 0 and cc_history[cc_number] is not None and time.time() - cc_history[cc_number] > 2 * DOUBLE_TAP_THRESHOLD:
-                output.send(mido.Message('control_change', control=1, value = 127))
-                output.send(mido.Message('control_change', control=1, value = 0))
-                program_change(program_number//5*4 + 1 if (program_number%5==4) else 4)
             if cc_callback[cc_number] is not None:
                 cc_callback[cc_number](cc_number, msg.value)
             if msg.value == 127:
@@ -157,28 +185,39 @@ def main():
                     print("double")
                     last_double = time.time()
                     was = program_number
-                    # output.send(mido.Message('control_change', control=1, value = 127))
-                    # output.send(mido.Message('control_change', control=1, value = 0))
+                    output.send(mido.Message('control_change', control=1, value = 127))
+                    output.send(mido.Message('control_change', control=1, value = 0))
                     program_change(program_number//5*4 + 1 if (program_number%5==2) else 2)
             case 3:
                 print('bank up')
                 bank_change(bank_number + 1)
             case 4:
                 print('bank down')
-                if bank_number > 1:
-                    bank_change(bank_number - 1)
+                bank_change(bank_number - 1)
             case 71:
                 print('1')
-                program_change((bank_number-1)*4 + 1)
+                if (bank_number > 0):
+                    program_change((bank_number-1)*4 + 1)
+                else:
+                    program_change(array1[bank_number] or 1)
             case 72:
                 print('2')
-                program_change((bank_number-1)*4 + 2)
+                if (bank_number > 0):
+                    program_change((bank_number-1)*4 + 2)
+                else:
+                    program_change(array2[bank_number] or 2)
             case 73:
                 print('3')
-                program_change((bank_number-1)*4 + 3)
+                if (bank_number > 0):
+                    program_change((bank_number-1)*4 + 3)
+                else:
+                    program_change(array3[bank_number] or 3)
             case 74:
                 print('4')
-                program_change((bank_number-1)*4 + 4)
+                if (bank_number > 0):
+                    program_change((bank_number-1)*4 + 4)
+                else:
+                    program_change(array4[bank_number] or 4)
 
     # Constants
     DOUBLE_TAP_THRESHOLD = 0.5  # Adjust this threshold as needed (in seconds)
