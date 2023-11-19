@@ -2,17 +2,18 @@
 import mido
 import sys
 from collections import defaultdict
-import time
 import threading
 import time
 import json
 
 # Constants
 DOUBLE_TAP_THRESHOLD = 0.5  # Adjust this threshold as needed (in seconds)
+LONG_PRESS_THRESHOLD = 0.75  # Adjust this threshold as needed (in seconds)
 class Press:
     SINGLE = 1
     DOUBLE = 2
     TRIPLE = 3
+    LONG = 4
 
 print(mido.get_input_names())
 
@@ -54,7 +55,7 @@ array1, array2, array3, array4 = load_state_from_json('arrays.json')
 arrays = [array1, array2, array3, array4]
 
 # Example of updating an element (array index, element index, new value)
-update_array(arrays, 0, 2, 100)  # Update 3rd element of the 1st array
+# update_array(arrays, 0, 2, 100)  # Update 3rd element of the 1st array
 
 def make_title_sysex(input_name):
     input_data = input_name.ljust(16)
@@ -134,8 +135,6 @@ def main():
     was = None
 
     program_change(1)
-    # what is this?
-    output2.send(mido.Message('sysex', data=[ 0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x7F, 0x00, 0x00, 0x01, 0x01, 0x7F]))
 
     # Define a function to handle MIDI messages
     def handle_midi_message(msg):
@@ -145,11 +144,8 @@ def main():
         if msg.type == 'control_change':
             cc_number = msg.control
             timestamp = time.time()
-            if cc_number == 10 and msg.value == 0 and len(cc_history[cc_number]) > 0 and timestamp - cc_history[cc_number][-1] > 2 * DOUBLE_TAP_THRESHOLD:
-                output.send(mido.Message('control_change', control=1, value = 127))
-                output.send(mido.Message('control_change', control=1, value = 0))
-                program_number = program_number//5*4 + 1 if (program_number%5==4) else 4
-                program_change(program_number)
+            if cc_long_callback[cc_number] is not None and msg.value == 0 and len(cc_history[cc_number]) > 0 and timestamp - cc_history[cc_number][-1] > LONG_PRESS_THRESHOLD:
+                cc_long_callback[cc_number](cc_number, msg.value, Press.LONG)
             if cc_callback[cc_number] is not None:
                 cc_callback[cc_number](cc_number, msg.value)
             if msg.value == 127:
@@ -186,6 +182,10 @@ def main():
             case Press.TRIPLE:
                 pulse_cc(1)
                 program_change(program_number//5*4 + 1 if (was%5==3) else 3)
+            case Press.LONG:
+                pulse_cc(1)
+                program_number = program_number//5*4 + 1 if (program_number%5==4) else 4
+                program_change(program_number)
 
     def color_callback(cc_number, value):
             button_hex = 0x08 + 2 * (cc_number - 41)
@@ -200,17 +200,19 @@ def main():
         if (bank_number > 0):
             program_change((bank_number-1)*4 + cc_number - 70)
         else:
-            program_change(array1[bank_number] or cc_number - 70)
+            program_change(array1[-bank_number] or cc_number - 70)
 
     # Create a dictionary to store callback functions for each CC number
     cc_callback = defaultdict(lambda: None)
     cc_single_callback = defaultdict(lambda: None)
     cc_double_callback = defaultdict(lambda: None)
     cc_triple_callback = defaultdict(lambda: None)
+    cc_long_callback = defaultdict(lambda: None)
 
     cc_single_callback[10] = cc_10_callback
     cc_triple_callback[10] = cc_10_callback
     cc_double_callback[10] = cc_10_callback
+    cc_long_callback[10] = cc_10_callback
     cc_double_callback[3] = lambda cc_number, value, tap: bank_change(bank_number + 1)
     cc_double_callback[4] = lambda cc_number, value, tap: bank_change(bank_number - 1)
     cc_callback[41] = color_callback
