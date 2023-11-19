@@ -136,7 +136,7 @@ def main():
     def handle_midi_message(msg):
         if not msg:
             return
-        global program_number
+        global last_double, program_number
         if msg.type == 'control_change':
             cc_number = msg.control
             timestamp = time.time()
@@ -149,14 +149,25 @@ def main():
                 cc_callback[cc_number](cc_number, msg.value)
             if msg.value == 127:
                 if cc_history[cc_number] is None:
-                    cc_history[cc_number] = timestamp
-                elif timestamp - cc_history[cc_number] < DOUBLE_TAP_THRESHOLD:
+                    cc_history[cc_number] = []
+                cc_history[cc_number].append(timestamp)
+                cc_history[cc_number] = cc_history[cc_number][-3:]  # Keep only the last 3 timestamps
+
+                # Check for triple tap
+                if len(cc_history[cc_number]) == 3 and cc_history[cc_number][-1] - cc_history[cc_number][0] < 2 * DOUBLE_TAP_THRESHOLD:
+                    if cc_triple_callback[cc_number] is not None:
+                        cc_triple_callback[cc_number](cc_number, msg.value)
+                    cc_history[cc_number] = []
+                # Check for double tap (only if triple tap was not detected)
+                elif len(cc_history[cc_number]) >= 2 and cc_history[cc_number][-1] - cc_history[cc_number][-2] < DOUBLE_TAP_THRESHOLD:
                     if cc_double_callback[cc_number] is not None:
                         cc_double_callback[cc_number](cc_number, msg.value)
-                    # cc_history[cc_number] = None
-                else:
-                    cc_history[cc_number] = timestamp
-            print(msg)
+
+    def my_triple_callback(cc_number, value):
+        global program_number, was
+        output.send(mido.Message('control_change', control=1, value = 127))
+        output.send(mido.Message('control_change', control=1, value = 0))
+        program_change(program_number//5*4 + 1 if (was%5==3) else 3)
 
     def my_callback2(cc_number, value):
         if value == 0: return
@@ -170,7 +181,6 @@ def main():
             button_hex = 0x08 + 2 * (cc_number - 41)
             if value < 8:
                 print(f"color {cc_number}: {value}")
-                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex_patch(button_hex, value)), mido.Message('sysex', data=make_color_sysex_patch(button_hex+1, value))], 0.0)).start()
                 threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex_patch(button_hex, value)), mido.Message('sysex', data=make_color_sysex_patch(button_hex+1, value))], 0.3)).start()
 
     # Define a callback function for a specific CC number
@@ -182,16 +192,9 @@ def main():
         if value == 0: return
         match cc_number:
             case 10:
-                if last_double is not None and time.time() - last_double < 2*DOUBLE_TAP_THRESHOLD:
-                    print("triple")
-                    program_change(program_number//5*4 + 1 if (was%5==3) else 3)
-                else:
-                    print("double")
-                    last_double = time.time()
-                    was = program_number
-                    output.send(mido.Message('control_change', control=1, value = 127))
-                    output.send(mido.Message('control_change', control=1, value = 0))
-                    program_change(program_number//5*4 + 1 if (program_number%5==2) else 2)
+                last_double = time.time()
+                was = program_number
+                program_change(program_number//5*4 + 1 if (program_number%5==2) else 2)
             case 3:
                 print('bank up')
                 bank_change(bank_number + 1)
@@ -229,6 +232,8 @@ def main():
     # Create a dictionary to store callback functions for each CC number
     cc_callback = defaultdict(lambda: None)
     cc_double_callback = defaultdict(lambda: None)
+    cc_triple_callback = defaultdict(lambda: None)
+    cc_triple_callback[10] = my_triple_callback
     cc_double_callback[10] = my_callback
     cc_double_callback[3] = my_callback
     cc_double_callback[4] = my_callback
