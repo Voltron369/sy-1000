@@ -139,11 +139,15 @@ def main():
         global program_number
         if msg.type == 'control_change':
             cc_number = msg.control
+            timestamp = time.time()
+            if cc_number == 10 and msg.value == 0 and len(cc_history[cc_number]) > 0 and timestamp - cc_history[cc_number][-1] > 2 * DOUBLE_TAP_THRESHOLD:
+                output.send(mido.Message('control_change', control=1, value = 127))
+                output.send(mido.Message('control_change', control=1, value = 0))
+                program_number = program_number//5*4 + 1 if (program_number%5==4) else 4
+                program_change(program_number)
             if cc_callback[cc_number] is not None:
                 cc_callback[cc_number](cc_number, msg.value)
             if msg.value == 127:
-                timestamp = time.time()
-                # Check for double tap on the same CC number
                 if cc_history[cc_number] is None:
                     cc_history[cc_number] = timestamp
                 elif timestamp - cc_history[cc_number] < DOUBLE_TAP_THRESHOLD:
