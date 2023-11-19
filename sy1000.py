@@ -7,6 +7,13 @@ import threading
 import time
 import json
 
+# Constants
+DOUBLE_TAP_THRESHOLD = 0.5  # Adjust this threshold as needed (in seconds)
+class Press:
+    SINGLE = 1
+    DOUBLE = 2
+    TRIPLE = 3
+
 print(mido.get_input_names())
 
 input_port_name = "SY-1000"  # Replace with your MIDI input port name
@@ -120,13 +127,11 @@ def program_change(number):
     output.send(mido.Message('program_change', program=number-1))
 
 def main():
-    global last_double
     global was
     global bank_number
     program_number = 1
     bank_number = 1
-    last_double = None
-    was = 10
+    was = None
 
     program_change(1)
     # what is this?
@@ -136,7 +141,7 @@ def main():
     def handle_midi_message(msg):
         if not msg:
             return
-        global last_double, program_number
+        global program_number
         if msg.type == 'control_change':
             cc_number = msg.control
             timestamp = time.time()
@@ -148,6 +153,8 @@ def main():
             if cc_callback[cc_number] is not None:
                 cc_callback[cc_number](cc_number, msg.value)
             if msg.value == 127:
+                if cc_single_callback[cc_number] is not None:
+                    cc_single_callback[cc_number](cc_number, msg.value, Press.SINGLE)
                 if cc_history[cc_number] is None:
                     cc_history[cc_number] = []
                 cc_history[cc_number].append(timestamp)
@@ -156,96 +163,64 @@ def main():
                 # Check for triple tap
                 if len(cc_history[cc_number]) == 3 and cc_history[cc_number][-1] - cc_history[cc_number][0] < 2 * DOUBLE_TAP_THRESHOLD:
                     if cc_triple_callback[cc_number] is not None:
-                        cc_triple_callback[cc_number](cc_number, msg.value)
+                        cc_triple_callback[cc_number](cc_number, msg.value, Press.TRIPLE)
                     cc_history[cc_number] = []
                 # Check for double tap (only if triple tap was not detected)
                 elif len(cc_history[cc_number]) >= 2 and cc_history[cc_number][-1] - cc_history[cc_number][-2] < DOUBLE_TAP_THRESHOLD:
                     if cc_double_callback[cc_number] is not None:
-                        cc_double_callback[cc_number](cc_number, msg.value)
+                        cc_double_callback[cc_number](cc_number, msg.value, Press.DOUBLE)
 
-    def my_triple_callback(cc_number, value):
-        global program_number, was
+    def pulse_cc(cc_number):
         output.send(mido.Message('control_change', control=1, value = 127))
         output.send(mido.Message('control_change', control=1, value = 0))
-        program_change(program_number//5*4 + 1 if (was%5==3) else 3)
 
-    def my_callback2(cc_number, value):
-        if value == 0: return
-        print("cc is {}".format(cc_number))
-        match cc_number:
-            case 10:
-                output.send(mido.Message('control_change', control=1, value = 127))
-                output.send(mido.Message('control_change', control=1, value = 0))
+    def cc_10_callback(cc_number, value, tap):
+        global program_number, was
+        print("cc 10 {}".format(tap))
+        match tap:
+            case Press.SINGLE:
+                pulse_cc(1)
+            case Press.DOUBLE:
+                was = program_number
+                program_change(program_number//5*4 + 1 if (program_number%5==2) else 2)
+            case Press.TRIPLE:
+                pulse_cc(1)
+                program_change(program_number//5*4 + 1 if (was%5==3) else 3)
 
-    def my_callback3(cc_number, value):
+    def color_callback(cc_number, value):
             button_hex = 0x08 + 2 * (cc_number - 41)
             if value < 8:
                 print(f"color {cc_number}: {value}")
                 threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex_patch(button_hex, value)), mido.Message('sysex', data=make_color_sysex_patch(button_hex+1, value))], 0.3)).start()
 
     # Define a callback function for a specific CC number
-    def my_callback(cc_number, value):
-        global last_double
+    def patch_callback(cc_number, value, tap):
         global program_number
-        global was
         global bank_number
-        if value == 0: return
-        match cc_number:
-            case 10:
-                last_double = time.time()
-                was = program_number
-                program_change(program_number//5*4 + 1 if (program_number%5==2) else 2)
-            case 3:
-                print('bank up')
-                bank_change(bank_number + 1)
-            case 4:
-                print('bank down')
-                bank_change(bank_number - 1)
-            case 71:
-                print('1')
-                if (bank_number > 0):
-                    program_change((bank_number-1)*4 + 1)
-                else:
-                    program_change(array1[bank_number] or 1)
-            case 72:
-                print('2')
-                if (bank_number > 0):
-                    program_change((bank_number-1)*4 + 2)
-                else:
-                    program_change(array2[bank_number] or 2)
-            case 73:
-                print('3')
-                if (bank_number > 0):
-                    program_change((bank_number-1)*4 + 3)
-                else:
-                    program_change(array3[bank_number] or 3)
-            case 74:
-                print('4')
-                if (bank_number > 0):
-                    program_change((bank_number-1)*4 + 4)
-                else:
-                    program_change(array4[bank_number] or 4)
-
-    # Constants
-    DOUBLE_TAP_THRESHOLD = 0.5  # Adjust this threshold as needed (in seconds)
+        if (bank_number > 0):
+            program_change((bank_number-1)*4 + cc_number - 70)
+        else:
+            program_change(array1[bank_number] or cc_number - 70)
 
     # Create a dictionary to store callback functions for each CC number
     cc_callback = defaultdict(lambda: None)
+    cc_single_callback = defaultdict(lambda: None)
     cc_double_callback = defaultdict(lambda: None)
     cc_triple_callback = defaultdict(lambda: None)
-    cc_triple_callback[10] = my_triple_callback
-    cc_double_callback[10] = my_callback
-    cc_double_callback[3] = my_callback
-    cc_double_callback[4] = my_callback
-    cc_callback[10] = my_callback2
-    cc_callback[41] = my_callback3
-    cc_callback[42] = my_callback3
-    cc_callback[43] = my_callback3
-    cc_callback[44] = my_callback3
-    cc_callback[71] = my_callback
-    cc_callback[72] = my_callback
-    cc_callback[73] = my_callback
-    cc_callback[74] = my_callback
+
+    cc_single_callback[10] = cc_10_callback
+    cc_triple_callback[10] = cc_10_callback
+    cc_double_callback[10] = cc_10_callback
+    cc_double_callback[3] = lambda cc_number, value, tap: bank_change(bank_number + 1)
+    cc_double_callback[4] = lambda cc_number, value, tap: bank_change(bank_number - 1)
+    cc_callback[41] = color_callback
+    cc_callback[42] = color_callback
+    cc_callback[43] = color_callback
+    cc_callback[44] = color_callback
+    cc_single_callback[71] = patch_callback
+    cc_single_callback[72] = patch_callback
+    cc_single_callback[73] = patch_callback
+    cc_single_callback[74] = patch_callback
 
     # Create a dictionary to store the last timestamp for each CC number
     cc_history = defaultdict(lambda: None)
