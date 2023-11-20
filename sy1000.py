@@ -152,11 +152,14 @@ def main():
                 # Check for triple tap
                 if cc_triple_callback[cc_number] is not None and len(cc_history[cc_number]) == 3 and cc_history[cc_number][-1] - cc_history[cc_number][0] < 2 * DOUBLE_TAP_THRESHOLD:
                     cc_triple_callback[cc_number](cc_number, msg.value, Press.TRIPLE)
-                    cc_history[cc_number] = []
+                    # cc_history[cc_number] = []
                     return
                 # Check for double tap (only if triple tap was not detected)
                 if cc_double_callback[cc_number] is not None and len(cc_history[cc_number]) >= 2 and cc_history[cc_number][-1] - cc_history[cc_number][-2] < DOUBLE_TAP_THRESHOLD:
                     cc_double_callback[cc_number](cc_number, msg.value, Press.DOUBLE)
+                    return
+                if cc_pr_callback[cc_number] is not None:
+                    cc_pr_callback[cc_number](cc_number, msg.value, Press.SINGLE)
                     return
             if cc_callback[cc_number] is not None:
                 cc_callback[cc_number](cc_number, msg.value)
@@ -165,7 +168,9 @@ def main():
                     cc_history[cc_number] = []
                 cc_history[cc_number].append(timestamp)
                 cc_history[cc_number] = cc_history[cc_number][-3:]  # Keep only the last 3 timestamps
-                if cc_single_callback[cc_number] is not None:
+                if cc_pr_callback[cc_number] is not None and not ((cc_double_callback[cc_number] is not None or cc_triple_callback[cc_number] is not None) and len(cc_history[cc_number]) >= 2 and cc_history[cc_number][-1] - cc_history[cc_number][-2] < DOUBLE_TAP_THRESHOLD):
+                    cc_pr_callback[cc_number](cc_number, msg.value, Press.SINGLE)
+                if cc_single_callback[cc_number] is not None and not ((cc_double_callback[cc_number] is not None or cc_triple_callback[cc_number] is not None) and len(cc_history[cc_number]) >= 2 and cc_history[cc_number][-1] - cc_history[cc_number][-2] < DOUBLE_TAP_THRESHOLD):
                     cc_single_callback[cc_number](cc_number, msg.value, Press.SINGLE)
                     return
 
@@ -180,13 +185,13 @@ def main():
             case Press.SINGLE:
                 pulse_cc(1)
             case Press.DOUBLE:
+                pulse_cc(1)
                 button_number_was = button_number
                 if (button_number == 2):
                     program_change(array1[0],1)
                 else:
                     program_change(array2[0],2)
             case Press.TRIPLE:
-                pulse_cc(1)
                 if (button_number_was == 3):
                     program_change(array1[0],1)
                 else:
@@ -204,9 +209,13 @@ def main():
                 print(f"color {cc_number}: {value}")
                 threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex_patch(button_hex, value)), mido.Message('sysex', data=make_color_sysex_patch(button_hex+1, value))], 0.3)).start()
 
+    def echo_callback(cc_number, value, tap):
+        output.send(mido.Message('control_change', control=cc_number, value = value))
+
     def bank_change_callback(cc_number, value, tap):
         global bank_number
-        if (tap == Press.TRIPLE):
+        print(f"cc {cc_number} {tap}")
+        if (tap == Press.DOUBLE):
             pulse_cc(cc_number)
         bank_change(bank_number+(1 if cc_number == 3 else -1))
 
@@ -234,6 +243,7 @@ def main():
 
     # Create a dictionary to store callback functions for each CC number
     cc_callback = defaultdict(lambda: None)
+    cc_pr_callback = defaultdict(lambda: None)
     cc_single_callback = defaultdict(lambda: None)
     cc_double_callback = defaultdict(lambda: None)
     cc_triple_callback = defaultdict(lambda: None)
@@ -243,6 +253,10 @@ def main():
     cc_triple_callback[10] = cc_10_callback
     cc_double_callback[10] = cc_10_callback
     cc_long_callback[10] = cc_10_callback
+    cc_pr_callback[1] = echo_callback
+    cc_pr_callback[2] = echo_callback
+    cc_pr_callback[3] = echo_callback
+    cc_pr_callback[4] = echo_callback
     cc_double_callback[3] = bank_change_callback
     cc_double_callback[4] = bank_change_callback
     cc_triple_callback[3] = bank_change_callback
