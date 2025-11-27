@@ -9,11 +9,14 @@ import json
 # Constants
 DOUBLE_TAP_THRESHOLD = 0.5  # Adjust this threshold as needed (in seconds)
 LONG_PRESS_THRESHOLD = 0.75  # Adjust this threshold as needed (in seconds)
+
+
 class Press:
     SINGLE = 1
     DOUBLE = 2
     TRIPLE = 3
     LONG = 4
+
 
 print(mido.get_input_names())
 
@@ -35,15 +38,19 @@ def load_state_from_json(filename):
         # Return default arrays if file not found
         return [1], [2], [3], [4]
 
+
 def save_state_to_json(filename, array1, array2, array3, array4):
-    data = {'array1': array1, 'array2': array2, 'array3': array3, 'array4': array4}
+    data = {'array1': array1, 'array2': array2,
+            'array3': array3, 'array4': array4}
     with open(filename, 'w') as file:
         json.dump(data, file)
+
 
 def update_array(arrays, array_index, element_index, new_value):
     # Ensure the array is large enough
     while len(arrays[array_index]) <= element_index:
-        arrays[array_index].append(array_index)  # Append None or a default value
+        # Append None or a default value
+        arrays[array_index].append(array_index)
     # Update the element
     arrays[array_index][element_index] = new_value
     # Save the updated state
@@ -56,6 +63,7 @@ arrays = [array1, array2, array3, array4]
 
 # Example of updating an element (array index, element index, new value)
 # update_array(arrays, 0, 2, 100)  # Update 3rd element of the 1st array
+
 
 def make_title_sysex(input_name):
     input_data = input_name.ljust(16)
@@ -77,21 +85,25 @@ def make_title_sysex(input_name):
     print(f"sending message {input_data}")
     return sysex_message
 
+
 def calculate_checksum(data):
     checksum = 128 - (sum(data) % 128)
     return checksum
 
+
 def make_color_sysex_patch(button, color):
-    data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12]
-    data2=[0x10, 0x00, 0x03, button, color]
+    data = [0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12]
+    data2 = [0x10, 0x00, 0x03, button, color]
     sysex = data+data2+[calculate_checksum(data2)]
     return sysex
 
+
 def make_color_sysex_system(button, color):
-    data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12]
-    data2=[0x00, 0x01, 0x20, button, color]
+    data = [0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12]
+    data2 = [0x00, 0x01, 0x20, button, color]
     sysex = data+data2+[calculate_checksum(data2)]
     return sysex
+
 
 def send_messages_after_delay(port, messages, delay):
     for msg in messages:
@@ -101,19 +113,24 @@ def send_messages_after_delay(port, messages, delay):
         port.send(msg)  # Send the SysEx message
         # print("SysEx message sent.")
 
+
 def get_char_for_number(number):
     # ASCII value of 'A' is 65, subtract the number from 65 to get the desired ASCII value
     ascii_value = 65 - number
     # Convert the ASCII value back to a character
     return chr(ascii_value)
 
+
 def bank_change(number):
     global bank_number
     bank_number = number
     if (number > 0):
-        output2.send(mido.Message('sysex', data=make_title_sysex("bank "+str(number))))
+        output2.send(mido.Message(
+            'sysex', data=make_title_sysex("bank "+str(number))))
     else:
-        output2.send(mido.Message('sysex', data=make_title_sysex("bank "+get_char_for_number(number))))
+        output2.send(mido.Message('sysex', data=make_title_sysex(
+            "bank "+get_char_for_number(number))))
+
 
 def program_change(number, button):
     global program_number, button_number
@@ -121,11 +138,16 @@ def program_change(number, button):
     button_number = button
     print("program change: {}".format(number))
     print("button: {}, program change: {}".format(button, number))
-    output2.send(mido.Message('sysex', data=[ 0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x00, 0x01, 0x10, 0x00, 0x8 if button == 1 else 0x00, 0x67 if button == 1 else 0x6F]))
-    output2.send(mido.Message('sysex', data=[ 0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x00, 0x01, 0x10, 0x02, 0x8 if button == 2 else 0x00, 0x65 if button == 2 else 0x6D]))
-    output2.send(mido.Message('sysex', data=[ 0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x00, 0x01, 0x10, 0x04, 0x8 if button == 3 else 0x00, 0x63 if button == 3 else 0x6B]))
-    output2.send(mido.Message('sysex', data=[ 0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x00, 0x01, 0x10, 0x06, 0x8 if button == 4 else 0x00, 0x61 if button == 4 else 0x69]))
+    output2.send(mido.Message('sysex', data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x00,
+                 0x01, 0x10, 0x00, 0x8 if button == 1 else 0x00, 0x67 if button == 1 else 0x6F]))
+    output2.send(mido.Message('sysex', data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x00,
+                 0x01, 0x10, 0x02, 0x8 if button == 2 else 0x00, 0x65 if button == 2 else 0x6D]))
+    output2.send(mido.Message('sysex', data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x00,
+                 0x01, 0x10, 0x04, 0x8 if button == 3 else 0x00, 0x63 if button == 3 else 0x6B]))
+    output2.send(mido.Message('sysex', data=[0x41, 0x10, 0x00, 0x00, 0x00, 0x69, 0x12, 0x00,
+                 0x01, 0x10, 0x06, 0x8 if button == 4 else 0x00, 0x61 if button == 4 else 0x69]))
     output.send(mido.Message('program_change', program=number-1))
+
 
 def main():
     global bank_number, clipboard, button_number, button_number_was
@@ -135,7 +157,7 @@ def main():
     button_number_was = 1
     clipboard = 1
 
-    program_change(1,1)
+    program_change(1, 1)
 
     # Define a function to handle MIDI messages
     def handle_midi_message(msg):
@@ -147,19 +169,23 @@ def main():
             timestamp = time.time()
             if msg.value == 0:
                 if cc_long_callback[cc_number] is not None and len(cc_history[cc_number]) > 0 and timestamp - cc_history[cc_number][-1] > LONG_PRESS_THRESHOLD:
-                    cc_long_callback[cc_number](cc_number, msg.value, Press.LONG)
+                    cc_long_callback[cc_number](
+                        cc_number, msg.value, Press.LONG)
                     return
                 # Check for triple tap
                 if cc_triple_callback[cc_number] is not None and len(cc_history[cc_number]) == 3 and cc_history[cc_number][-1] - cc_history[cc_number][0] < 2 * DOUBLE_TAP_THRESHOLD:
-                    cc_triple_callback[cc_number](cc_number, msg.value, Press.TRIPLE)
+                    cc_triple_callback[cc_number](
+                        cc_number, msg.value, Press.TRIPLE)
                     # cc_history[cc_number] = []
                     return
                 # Check for double tap (only if triple tap was not detected)
                 if cc_double_callback[cc_number] is not None and len(cc_history[cc_number]) >= 2 and cc_history[cc_number][-1] - cc_history[cc_number][-2] < DOUBLE_TAP_THRESHOLD:
-                    cc_double_callback[cc_number](cc_number, msg.value, Press.DOUBLE)
+                    cc_double_callback[cc_number](
+                        cc_number, msg.value, Press.DOUBLE)
                     return
                 if cc_pr_callback[cc_number] is not None:
-                    cc_pr_callback[cc_number](cc_number, msg.value, Press.SINGLE)
+                    cc_pr_callback[cc_number](
+                        cc_number, msg.value, Press.SINGLE)
                     return
             if cc_callback[cc_number] is not None:
                 cc_callback[cc_number](cc_number, msg.value)
@@ -167,16 +193,20 @@ def main():
                 if cc_history[cc_number] is None:
                     cc_history[cc_number] = []
                 cc_history[cc_number].append(timestamp)
-                cc_history[cc_number] = cc_history[cc_number][-3:]  # Keep only the last 3 timestamps
+                # Keep only the last 3 timestamps
+                cc_history[cc_number] = cc_history[cc_number][-3:]
                 if cc_pr_callback[cc_number] is not None and not ((cc_double_callback[cc_number] is not None or cc_triple_callback[cc_number] is not None) and len(cc_history[cc_number]) >= 2 and cc_history[cc_number][-1] - cc_history[cc_number][-2] < DOUBLE_TAP_THRESHOLD):
-                    cc_pr_callback[cc_number](cc_number, msg.value, Press.SINGLE)
+                    cc_pr_callback[cc_number](
+                        cc_number, msg.value, Press.SINGLE)
                 if cc_single_callback[cc_number] is not None and not ((cc_double_callback[cc_number] is not None or cc_triple_callback[cc_number] is not None) and len(cc_history[cc_number]) >= 2 and cc_history[cc_number][-1] - cc_history[cc_number][-2] < DOUBLE_TAP_THRESHOLD):
-                    cc_single_callback[cc_number](cc_number, msg.value, Press.SINGLE)
+                    cc_single_callback[cc_number](
+                        cc_number, msg.value, Press.SINGLE)
                     return
 
     def pulse_cc(cc_number):
-        output.send(mido.Message('control_change', control=cc_number, value = 127))
-        output.send(mido.Message('control_change', control=cc_number, value = 0))
+        output.send(mido.Message('control_change',
+                    control=cc_number, value=127))
+        output.send(mido.Message('control_change', control=cc_number, value=0))
 
     def cc_10_callback(cc_number, value, tap):
         global program_number, button_number, button_number_was
@@ -188,29 +218,31 @@ def main():
                 pulse_cc(1)
                 button_number_was = button_number
                 if (button_number == 2):
-                    program_change(array1[0],1)
+                    program_change(array1[0], 1)
                 else:
-                    program_change(array2[0],2)
+                    program_change(array2[0], 2)
             case Press.TRIPLE:
                 if (button_number_was == 3):
-                    program_change(array1[0],1)
+                    program_change(array1[0], 1)
                 else:
-                    program_change(array3[0],3)
+                    program_change(array3[0], 3)
             case Press.LONG:
                 pulse_cc(1)
                 if (button_number == 4):
-                    program_change(array1[0],1)
+                    program_change(array1[0], 1)
                 else:
-                    program_change(array4[0],4)
+                    program_change(array4[0], 4)
 
     def color_callback(cc_number, value):
-            button_hex = 0x08 + 2 * (cc_number - 41)
-            if value < 8:
-                print(f"color {cc_number}: {value}")
-                threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex_patch(button_hex, value)), mido.Message('sysex', data=make_color_sysex_patch(button_hex+1, value))], 0.3)).start()
+        button_hex = 0x08 + 2 * (cc_number - 41)
+        if value < 8:
+            print(f"color {cc_number}: {value}")
+            threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_color_sysex_patch(
+                button_hex, value)), mido.Message('sysex', data=make_color_sysex_patch(button_hex+1, value))], 0.3)).start()
 
     def echo_callback(cc_number, value, tap):
-        output.send(mido.Message('control_change', control=cc_number, value = value))
+        output.send(mido.Message('control_change',
+                    control=cc_number, value=value))
 
     def bank_change_callback(cc_number, value, tap):
         global bank_number
@@ -237,9 +269,11 @@ def main():
             clipboard = program_number
             bank_change(0)
         else:
-            update_array(arrays, button_number-1, -bank_number, clipboard)  # Update 3rd element of the 1st array
+            # Update 3rd element of the 1st array
+            update_array(arrays, button_number-1, -bank_number, clipboard)
             program_change(clipboard, button_number)
-            threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_title_sysex(f"set {get_char_for_number(bank_number)}{button_number} <- {clipboard}"))], 0.5)).start()
+            threading.Thread(target=send_messages_after_delay, args=(output2, [mido.Message('sysex', data=make_title_sysex(
+                f"set {get_char_for_number(bank_number)}{button_number} <- {clipboard}"))], 0.5)).start()
 
     # Create a dictionary to store callback functions for each CC number
     cc_callback = defaultdict(lambda: None)
@@ -305,4 +339,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -1,3 +1,4 @@
 *.mid
 *.syx
 arrays.json
+local*
