@@ -277,7 +277,7 @@ def main():
     # Create a dictionary to store the last timestamp for each CC number
     cc_history = defaultdict(lambda: None)
 
-    if False:
+    if True:
         # async
         # Open a MIDI input port (change 'Your MIDI Input Port' to your actual port name)
         mido.open_input(name=input_port_name, callback=handle_midi_message)

@@ -1,0 +1,48 @@
+digraph midiControlSystem {
+  rankdir=LR;
+  node [shape = rect]
+  splines=line
+
+  subgraph cluster_DAW {
+    style=filled;
+    color=lightcoral;
+    label="Mainstage";
+    SYChannelStrip [label="SY-1000 Channel Strip"]
+    LightControlDAW [label="Light Control"]
+    ProgramChangesDAW [label="Program Changes"];
+  }
+  
+  subgraph cluster_SY1000 {
+    style=filled;
+    color=lightblue;
+    label="SY-1000";
+    Buttons [label="Buttons", shape=ellipse];
+    ProgramChangesSY [label="Program Changes"];
+    Title [label="Patch Title"];
+    ControlLEDs [label="Control LED Color"];
+    PatchLEDs [label="Patch LEDs"];
+  }
+  
+  subgraph cluster_PythonScript {
+    style=filled;
+    color=green;
+    label="Python Script";
+    MidiPC [label="MIDI PC"];
+    MidiCC [label="MIDI CC"];
+    MidiSysex [label="MIDI Sysex"];
+  }
+
+  Buttons -> MidiCC;
+  LightControlDAW -> MidiCC;
+  MidiCC -> LightControlDAW [style=invis];
+  MidiPC -> ProgramChangesDAW;
+  MidiSysex -> PatchLEDs;
+  MidiSysex -> ControlLEDs;
+  SYChannelStrip -> ProgramChangesSY [label="If needed"];
+  SYChannelStrip -> Title;
+  LightControlDAW -> ProgramChangesDAW [style=invis];
+  LightControlDAW -> SYChannelStrip  [style=invis];
+
+ 
+}
+
